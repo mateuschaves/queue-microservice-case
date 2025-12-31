@@ -1,0 +1,16 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-failure-experiment
+  namespace: default
+spec:
+  action: pod-failure
+  mode: fixed-percent
+  value: "50"
+  duration: "30s"
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      tier: worker
+

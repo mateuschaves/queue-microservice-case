@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql
+  labels:
+    app: postgresql
+    tier: database
+    lang: sql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql
+  template:
+    metadata:
+      labels:
+        app: postgresql
+        tier: database
+        lang: sql
+    spec:
+      containers:
+      - name: postgresql
+        image: postgres:15-alpine
+        env:
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          value: "postgres"
+        - name: POSTGRES_DB
+          value: "queue_case"
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: init-script
+          mountPath: /docker-entrypoint-initdb.d
+      volumes:
+      - name: postgres-data
+        emptyDir: {}
+      - name: init-script
+        configMap:
+          name: postgresql-init
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql
+  labels:
+    app: postgresql
+    tier: database
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+  selector:
+    app: postgresql
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-init
+data:
+  init.sql: |
+    CREATE TABLE IF NOT EXISTS messages (
+        idempotency_id VARCHAR(255) PRIMARY KEY,
+        correlation_id VARCHAR(255) NOT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'pending',
+        payload JSONB,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_correlation_id ON messages(correlation_id);
+    CREATE INDEX IF NOT EXISTS idx_status ON messages(status);
+    
+    CREATE TABLE IF NOT EXISTS message_history (
+        id SERIAL PRIMARY KEY,
+        idempotency_id VARCHAR(255) NOT NULL,
+        correlation_id VARCHAR(255) NOT NULL,
+        status VARCHAR(50) NOT NULL,
+        service_name VARCHAR(100) NOT NULL,
+        event_id VARCHAR(255),
+        error_message TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (idempotency_id) REFERENCES messages(idempotency_id) ON DELETE CASCADE
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_history_idempotency_id ON message_history(idempotency_id);
+    CREATE INDEX IF NOT EXISTS idx_history_correlation_id ON message_history(correlation_id);
+    CREATE INDEX IF NOT EXISTS idx_history_created_at ON message_history(created_at);
+

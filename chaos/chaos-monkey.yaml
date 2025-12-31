@@ -1,0 +1,17 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: chaos-monkey-scheduled
+  namespace: default
+spec:
+  action: pod-kill
+  mode: random-max-percent
+  value: "10"
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      tier: worker
+  scheduler:
+    cron: "@every 1m"
+
