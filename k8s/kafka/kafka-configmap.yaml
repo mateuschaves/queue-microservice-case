@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-startup-script
+data:
+  start-kafka.sh: |
+    #!/bin/bash
+    set -e
+    echo "Starting Kafka with full error logging..."
+    exec /etc/confluent/docker/run 2>&1
+

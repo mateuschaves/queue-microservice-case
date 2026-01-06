@@ -11,8 +11,12 @@ COPY notification-service/ ./notification-service/
 # Set working directory to service
 WORKDIR /app/notification-service
 
-# Download dependencies
-RUN go mod download
+# Download dependencies and generate go.sum files
+RUN go mod tidy && \
+    cd ../shared/contracts && go mod tidy && \
+    cd ../messaging && go mod tidy && \
+    cd ../logger && go mod tidy && \
+    cd /app/notification-service
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux go build -o notification-service .

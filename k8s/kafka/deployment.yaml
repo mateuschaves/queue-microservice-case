@@ -17,22 +17,84 @@ spec:
         app: kafka
         tier: messaging
     spec:
+      initContainers:
+      - name: wait-for-zookeeper
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z zookeeper 2181; do echo waiting for zookeeper; sleep 2; done;']
+      - name: prepare-kafka-dirs
+        image: busybox:1.35
+        command: ['sh', '-c', 'mkdir -p /var/lib/kafka/data && chmod 777 /var/lib/kafka/data']
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /var/lib/kafka/data
       containers:
       - name: kafka
-        image: confluentinc/cp-kafka:7.5.0
+        image: confluentinc/cp-kafka:7.4.0
         ports:
         - containerPort: 9092
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -e
+          echo "=== Starting Kafka ==="
+          echo "KAFKA_BROKER_ID: $KAFKA_BROKER_ID"
+          echo "KAFKA_ZOOKEEPER_CONNECT: $KAFKA_ZOOKEEPER_CONNECT"
+          echo "KAFKA_ADVERTISED_LISTENERS: $KAFKA_ADVERTISED_LISTENERS"
+          echo "KAFKA_LOG_DIRS: $KAFKA_LOG_DIRS"
+          echo "=== Executing Kafka startup ==="
+          exec /etc/confluent/docker/run
         env:
         - name: KAFKA_BROKER_ID
           value: "1"
         - name: KAFKA_ZOOKEEPER_CONNECT
           value: "zookeeper:2181"
+        - name: KAFKA_LISTENERS
+          value: "PLAINTEXT://0.0.0.0:9092"
         - name: KAFKA_ADVERTISED_LISTENERS
           value: "PLAINTEXT://kafka:9092"
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "PLAINTEXT:PLAINTEXT"
+        - name: KAFKA_INTER_BROKER_LISTENER_NAME
+          value: "PLAINTEXT"
         - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
           value: "1"
         - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
           value: "true"
+        - name: KAFKA_NUM_PARTITIONS
+          value: "1"
+        - name: KAFKA_LOG_DIRS
+          value: "/var/lib/kafka/data"
+        - name: KAFKA_HEAP_OPTS
+          value: "-Xmx512M -Xms512M"
+        - name: KAFKA_LOG4J_LOGGERS
+          value: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
+        - name: KAFKA_LOG4J_ROOT_LOGLEVEL
+          value: "WARN"
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /var/lib/kafka/data
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "kafka-broker-api-versions --bootstrap-server localhost:9092 || exit 1"
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 6
+        livenessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 90
+          periodSeconds: 20
+          timeoutSeconds: 10
+          failureThreshold: 3
         resources:
           requests:
             memory: "512Mi"
@@ -40,6 +102,9 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "1000m"
+      volumes:
+      - name: kafka-data
+        emptyDir: {}
 
 ---
 apiVersion: apps/v1

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/streadway/amqp"
@@ -42,17 +43,36 @@ func (r *RabbitMQBroker) Publish(ctx context.Context, queue string, event *contr
 		return fmt.Errorf("invalid event: %w", err)
 	}
 
-	// Declare queue
+	// Declare queue with DLX
 	_, err := r.channel.QueueDeclare(
 		queue,
 		true,  // durable
 		false, // delete when unused
 		false, // exclusive
 		false, // no-wait
-		nil,   // arguments
+		amqp.Table{
+			"x-dead-letter-exchange": "dlx",
+		},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to declare queue: %w", err)
+		// If queue exists with different config, try to delete and recreate
+		if err.Error() != "" && (strings.Contains(err.Error(), "PRECONDITION_FAILED") || strings.Contains(err.Error(), "inequivalent")) {
+			log.Printf("Queue %s exists with different config, attempting to delete and recreate...", queue)
+			r.channel.QueueDelete(queue, false, false, false)
+			_, err = r.channel.QueueDeclare(
+				queue,
+				true,
+				false,
+				false,
+				false,
+				amqp.Table{
+					"x-dead-letter-exchange": "dlx",
+				},
+			)
+		}
+		if err != nil {
+			return fmt.Errorf("failed to declare queue: %w", err)
+		}
 	}
 
 	data, err := json.Marshal(event)

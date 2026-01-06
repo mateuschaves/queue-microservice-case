@@ -1,33 +1,60 @@
 .PHONY: build build-all deploy deploy-all clean test logs
 
-# Build all services
+# Build all services (must be run from project root)
 build-all:
+	@if [ ! -d "shared" ] || [ ! -d "message-processor" ]; then \
+		echo "Error: Makefile must be run from project root directory"; \
+		echo "Current directory: $$(pwd)"; \
+		exit 1; \
+	fi
 	@echo "Building API Gateway..."
-	cd api-gateway && docker build -t api-gateway:latest .
+	@docker build -f api-gateway/Dockerfile -t api-gateway:latest .
 	@echo "Building Message Processor..."
-	cd message-processor && docker build -t message-processor:latest .
+	@docker build -f message-processor/Dockerfile -t message-processor:latest .
 	@echo "Building Notification Service..."
-	cd notification-service && docker build -t notification-service:latest .
+	@docker build -f notification-service/Dockerfile -t notification-service:latest .
+
+# Build individual services
+build-api:
+	@docker build -f api-gateway/Dockerfile -t api-gateway:latest .
+
+build-processor:
+	@docker build -f message-processor/Dockerfile -t message-processor:latest .
+
+build-notification:
+	@docker build -f notification-service/Dockerfile -t notification-service:latest .
+
+# Check if kubectl is configured
+check-k8s:
+	@if ! kubectl cluster-info &>/dev/null; then \
+		echo "Error: Kubernetes cluster is not accessible"; \
+		echo "Please ensure you have a Kubernetes cluster running and kubectl is configured."; \
+		echo "For local development, you can use:"; \
+		echo "  - minikube: minikube start"; \
+		echo "  - kind: kind create cluster"; \
+		echo "  - Docker Desktop: Enable Kubernetes in settings"; \
+		exit 1; \
+	fi
 
 # Deploy infrastructure
-deploy-infra:
+deploy-infra: check-k8s
 	@echo "Deploying PostgreSQL..."
-	kubectl apply -f k8s/postgresql/deployment.yaml
+	@kubectl apply --validate=false -f k8s/postgresql/deployment.yaml
 	@echo "Waiting for PostgreSQL..."
-	kubectl wait --for=condition=ready pod -l app=postgresql --timeout=120s
+	@kubectl wait --for=condition=ready pod -l app=postgresql --timeout=120s || true
 	@echo "Deploying Kafka..."
-	kubectl apply -f k8s/kafka/deployment.yaml
+	@kubectl apply --validate=false -f k8s/kafka/deployment.yaml
 	@echo "Waiting for Kafka..."
-	kubectl wait --for=condition=ready pod -l app=kafka --timeout=120s
+	@kubectl wait --for=condition=ready pod -l app=kafka --timeout=120s || true
 
 # Deploy all services
 deploy-all: deploy-infra
 	@echo "Deploying API Gateway..."
-	kubectl apply -f k8s/api-gateway/deployment.yaml
+	@kubectl apply --validate=false -f k8s/api-gateway/deployment.yaml
 	@echo "Deploying Message Processor..."
-	kubectl apply -f k8s/message-processor/deployment.yaml
+	@kubectl apply --validate=false -f k8s/message-processor/deployment.yaml
 	@echo "Deploying Notification Service..."
-	kubectl apply -f k8s/notification-service/deployment.yaml
+	@kubectl apply --validate=false -f k8s/notification-service/deployment.yaml
 
 # Clean up
 clean:

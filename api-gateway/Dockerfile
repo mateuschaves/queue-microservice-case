@@ -2,10 +2,12 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
+# Copy package files from api-gateway directory
+COPY api-gateway/package*.json ./
 RUN npm install
 
-COPY . .
+# Copy api-gateway source code
+COPY api-gateway/ ./
 RUN npm run build
 
 FROM node:20-alpine

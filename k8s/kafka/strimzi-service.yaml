@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: default
+  labels:
+    app: kafka
+    tier: messaging
+spec:
+  type: ExternalName
+  externalName: my-cluster-kafka-bootstrap.kafka.svc.cluster.local
+  ports:
+  - port: 9092
+    targetPort: 9092
+

@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redpanda
+  labels:
+    app: kafka
+    tier: messaging
+spec:
+  serviceName: redpanda
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+        tier: messaging
+    spec:
+      containers:
+      - name: redpanda
+        image: docker.redpanda.com/vectorized/redpanda:v23.3.8
+        command:
+        - /usr/bin/rpk
+        - redpanda
+        - start
+        - --kafka-addr
+        - internal://0.0.0.0:9092,external://0.0.0.0:19092
+        - --advertise-kafka-addr
+        - internal://redpanda:9092,external://redpanda:19092
+        - --pandaproxy-addr
+        - internal://0.0.0.0:8082,external://0.0.0.0:18082
+        - --advertise-pandaproxy-addr
+        - internal://redpanda:8082,external://redpanda:18082
+        - --schema-registry-addr
+        - internal://0.0.0.0:8081
+        - --rpc-addr
+        - redpanda:33145
+        - --advertise-rpc-addr
+        - redpanda:33145
+        - --smp
+        - "1"
+        - --memory
+        - "1G"
+        - --mode
+        - dev-container
+        - --default-log-level=info
+        ports:
+        - containerPort: 9092
+          name: kafka-internal
+        - containerPort: 19092
+          name: kafka-external
+        - containerPort: 8081
+          name: schema-registry
+        - containerPort: 8082
+          name: pandaproxy
+        - containerPort: 18082
+          name: pproxy-ext
+        - containerPort: 33145
+          name: rpc
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: redpanda-data
+          mountPath: /var/lib/redpanda/data
+      volumes:
+      - name: redpanda-data
+        emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  labels:
+    app: kafka
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9092
+    targetPort: 9092
+    name: kafka
+  selector:
+    app: kafka
+
